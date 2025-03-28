@@ -8,14 +8,14 @@ DST = None  # Directory where chunks will be saved
 
 assert SRC and DST, 'Please download the Pivoting data set, and mark in the code where it is:\nLines 6-7 of /experiments/loaders/split_pivoting.py'
 
-
 # Parameters
 DELTA = 10000  # Chunk duration: 10,000 seconds
-DAY = 60**2 * 24  # One day in seconds (for potential extensions)
+DAY = 60 ** 2 * 24  # One day in seconds (for potential extensions)
+
 
 def split_pivoting():
     base_time = None  # Will hold the first timestamp
-    cur_time = 0      # Relative time boundary for chunks
+    cur_time = 0  # Relative time boundary for chunks
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(DST), exist_ok=True)
@@ -92,6 +92,7 @@ def split_pivoting():
 
     with open(f'{DST}nmap.pkl', 'wb+') as f:
         pickle.dump(nmap_rev, f, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 if __name__ == '__main__':
     split_pivoting()

@@ -6,12 +6,11 @@ from tqdm import tqdm
 SRC = None  # Adapt to your actual file path
 DST = None  # Directory where chunks will be saved
 
-assert  SRC and DST, 'Please download the OpTC data set, and mark in the code where it is:\nLines 6-7 of /experiments/loaders/split_optc.py'
-
+assert SRC and DST, 'Please download the OpTC data set, and mark in the code where it is:\nLines 6-7 of /experiments/loaders/split_optc.py'
 
 # Parameters
 DELTA = 10000  # 10,000 seconds chunks
-DAY = 60**2 * 24  # Full day in seconds (not critical but useful for extensions)
+DAY = 60 ** 2 * 24  # Full day in seconds (not critical but useful for extensions)
 
 
 def split_optc():

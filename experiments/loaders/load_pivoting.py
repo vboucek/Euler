@@ -9,9 +9,8 @@ from tqdm import tqdm
 from experiments.loaders.tdata import TData
 from experiments.loaders.load_utils import edge_tv_split, std_edge_w, standardized
 
-# Input where LANL data cleaned with .clean_lanl.py is stored
-PIVOTING_FOLDER = "/Volumes/KINGSTON/optc_euler_split/optc_"
-assert PIVOTING_FOLDER, 'Please fill in the PIVOTING_FOLDER variable:\n line 14 /lanl_experiments/loaders/load_pivoting.py'
+PIVOTING_FOLDER = None
+assert PIVOTING_FOLDER, 'Please fill in the PIVOTING_FOLDER variable:\n line 12 /experiments/loaders/load_pivoting.py'
 
 FILE_DELTA = 10000
 
@@ -130,6 +129,7 @@ def make_data_obj(eis, ys, ew_fn, ews=None, **kwargs):
     return TData(
         eis_t, x, ys, masks, ews=ews, cnt=cnt, node_map=nm
     )
+
 
 def load_partial_pivoting(start=140000, end=156659, delta=8640, is_test=False, ew_fn=standardized):
     cur_slice = int(start - (start % FILE_DELTA))

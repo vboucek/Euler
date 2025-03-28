@@ -9,9 +9,8 @@ from tqdm import tqdm
 from experiments.loaders.tdata import TData
 from experiments.loaders.load_utils import edge_tv_split, std_edge_w, standardized
 
-# Input where LANL data cleaned with .clean_lanl.py is stored
-OPTC_FOLDER = "/Volumes/KINGSTON/optc_euler_split/optc_"
-assert OPTC_FOLDER, 'Please fill in the OPTC_FOLDER variable:\n line 14 /lanl_experiments/loaders/load_optc.py'
+OPTC_FOLDER = None
+assert OPTC_FOLDER, 'Please fill in the OPTC_FOLDER variable:\n line 13 /experiments/loaders/load_optc.py'
 
 FILE_DELTA = 10000
 
@@ -41,9 +40,6 @@ def load_optc_dist(workers, start=0, end=635015, delta=8640, is_test=False, ew_f
     per_worker = [num_slices // workers] * workers
     remainder = num_slices % workers
 
-    # Give everyone a balanced number of tasks
-    # put remainders on last machines as last task
-    # is probably smaller than a full delta
     if remainder:
         for i in range(workers, workers - remainder, -1):
             per_worker[i - 1] += 1
@@ -61,12 +57,10 @@ def load_optc_dist(workers, start=0, end=635015, delta=8640, is_test=False, ew_f
         })
         prev = end_t
 
-    # Now start the jobs in parallel
     datas = Parallel(n_jobs=workers, prefer='processes')(
         delayed(load_partial_optc_job)(i, kwargs[i]) for i in range(workers)
     )
 
-    # Helper method to concatonate one field from all of the datas
     data_reduce = lambda x: sum([getattr(datas[i], x) for i in range(workers)], [])
 
     # Just join all the lists from all the data objects
@@ -84,8 +78,6 @@ def load_optc_dist(workers, start=0, end=635015, delta=8640, is_test=False, ew_f
         ys = None
         cnt = None
 
-    # After everything is combined, wrap it in a fancy new object, and you're
-    # on your way to coolsville flats
     print("Done")
     return TData(
         eis, x, ys, masks, ews=ews, node_map=node_map, cnt=cnt
@@ -131,6 +123,7 @@ def make_data_obj(eis, ys, ew_fn, ews=None, **kwargs):
         eis_t, x, ys, masks, ews=ews, cnt=cnt, node_map=nm
     )
 
+
 def load_partial_optc(start=140000, end=156659, delta=8640, is_test=False, ew_fn=standardized):
     cur_slice = int(start - (start % FILE_DELTA))
     start_f = str(cur_slice) + '.txt'
@@ -141,15 +134,9 @@ def load_partial_optc(start=140000, end=156659, delta=8640, is_test=False, ew_fn
     edges_t = {}
     ys = []
 
-    # Predefined for easier loading so everyone agrees on NIDs
     node_map = pickle.load(open(OPTC_FOLDER + 'nmap.pkl', 'rb'))
-
-    # Helper functions (trims the trailing \n)
     fmt_line = lambda x: (int(x[0]), int(x[1]), int(x[2]), int(x[3][:-1]))
 
-    # For now, just keeps one copy of each edge. Could be
-    # modified in the future to add edge weight or something
-    # but for now, edges map to their anomaly value (1 == anom, else 0)
     def add_edge(et, is_anom=0):
         if et in edges_t:
             val = edges_t[et]
@@ -183,7 +170,6 @@ def load_partial_optc(start=140000, end=156659, delta=8640, is_test=False, ew_fn
             ts, src, dst, label = fmt_line(l)
             et = (src, dst)
 
-            # Not totally necessary but I like the loading bar
             prog.update(ts - old_ts)
             old_ts = ts
 
@@ -210,7 +196,7 @@ def load_partial_optc(start=140000, end=156659, delta=8640, is_test=False, ew_fn
                     keep_reading = False
                     break
 
-                    # Skip self-loops
+            # Skip self-loops
             if et[0] == et[1]:
                 line = in_f.readline()
                 continue

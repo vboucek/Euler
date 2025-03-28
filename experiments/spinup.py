@@ -6,9 +6,9 @@ import time
 from sklearn.metrics import \
     roc_auc_score as auc_score, \
     f1_score, average_precision_score as ap_score
-import torch 
-import torch.distributed as dist 
-import torch.distributed.rpc as rpc 
+import torch
+import torch.distributed as dist
+import torch.distributed.rpc as rpc
 import torch.distributed.autograd as dist_autograd
 from torch.distributed.optim import DistributedOptimizer
 import torch.multiprocessing as mp
@@ -16,7 +16,7 @@ from torch.optim import Adam, Adadelta
 
 from loaders.tdata import TData
 from loaders.load_lanl import load_lanl_dist
-from models.euler_detector import DetectorEncoder, DetectorRecurrent 
+from models.euler_detector import DetectorEncoder, DetectorRecurrent
 from models.euler_predictor import PredictorEncoder, PredictorRecurrent
 from models.utils import _remote_method_async, _remote_method
 from utils import get_score, get_optimal_cutoff
@@ -34,12 +34,12 @@ DEFAULT_TR = {
 }
 
 # Defaults
-WORKER_ARGS = [32,32]
-RNN_ARGS = [32,32,16,1]
+WORKER_ARGS = [32, 32]
+RNN_ARGS = [32, 32, 16, 1]
 
-WORKERS=4
-W_THREADS=1
-M_THREADS=2
+WORKERS = 4
+W_THREADS = 1
+M_THREADS = 2
 
 TMP_FILE = 'tmp.dat'
 SCORE_FILE = 'scores.txt'
@@ -54,46 +54,48 @@ torch.set_num_threads(1)
 '''
 Constructs params for data loaders
 '''
+
+
 def get_work_units(num_workers, start, end, delta, isTe):
-    slices_needed = math.ceil((end-start) / delta)
+    slices_needed = math.ceil((end - start) / delta)
 
     # Puts minimum tasks on each worker with some remainder
-    per_worker = [slices_needed // num_workers] * num_workers 
+    per_worker = [slices_needed // num_workers] * num_workers
 
-    remainder = slices_needed % num_workers 
+    remainder = slices_needed % num_workers
     if remainder:
         # Put remaining tasks on last workers since it's likely the 
         # final timeslice is stopped hallambda_paramay (ie it's less than a delta
         # so giving it extra timesteps is more likely okay)
-        for i in range(num_workers, num_workers-remainder, -1):
-            per_worker[i-1]+=1 
+        for i in range(num_workers, num_workers - remainder, -1):
+            per_worker[i - 1] += 1
 
-    # Only uncomment when running late at night
-    load_threads = W_THREADS*2 if isTe else W_THREADS
-    #load_threads = W_THREADS
+            # Only uncomment when running late at night
+    load_threads = W_THREADS * 2 if isTe else W_THREADS
+    # load_threads = W_THREADS
 
     # Make sure workers are collectively using at least 8 threads
     # since loading the data takes forever otherwise
-    min_threads = min(8, load_threads*num_workers)
-    t_per_worker = max(1, min_threads//num_workers)
+    min_threads = min(8, load_threads * num_workers)
+    t_per_worker = max(1, min_threads // num_workers)
 
     print("Tasks: %s" % str(per_worker))
     kwargs = []
     prev = start
-    
+
     for i in range(num_workers):
-            end_t = min(prev + delta*per_worker[i], end)
-            kwargs.append({
-                'start': prev,
-                'end': end_t,
-                'delta': delta, 
-                'is_test': isTe,
-                'jobs': t_per_worker
-            })
-            prev = end_t
+        end_t = min(prev + delta * per_worker[i], end)
+        kwargs.append({
+            'start': prev,
+            'end': end_t,
+            'delta': delta,
+            'is_test': isTe,
+            'jobs': t_per_worker
+        })
+        prev = end_t
 
     return kwargs
-    
+
 
 def init_workers(num_workers, start, end, delta, isTe, worker_constructor, worker_args):
     kwargs = get_work_units(num_workers, start, end, delta, isTe)
@@ -102,24 +104,25 @@ def init_workers(num_workers, start, end, delta, isTe, worker_constructor, worke
     for i in range(len(kwargs)):
         rrefs.append(
             rpc.remote(
-                'worker'+str(i),
+                'worker' + str(i),
                 worker_constructor,
                 args=(LOAD_FN, kwargs[i], *worker_args),
-                kwargs={'head': i==0}
+                kwargs={'head': i == 0}
             )
         )
 
     return rrefs
 
+
 def init_empty_workers(num_workers, worker_constructor, worker_args):
     empty = {'jobs': 0, 'start': None, 'end': None}
-    
+
     rrefs = [
         rpc.remote(
-            'worker'+str(i),
+            'worker' + str(i),
             worker_constructor,
             args=(LOAD_FN, empty, *worker_args),
-            kwargs={'head': i==0}
+            kwargs={'head': i == 0}
         )
         for i in range(num_workers)
     ]
@@ -200,7 +203,7 @@ def init_procs(rank, world_size, rnn_constructor, rnn_args, worker_constructor, 
 
 def train(rrefs, kwargs, rnn_constructor, rnn_args, impl):
     rnn = rnn_constructor(*rnn_args)
-    model = DetectorRecurrent(rnn, rrefs) if impl=='DETECT' \
+    model = DetectorRecurrent(rnn, rrefs) if impl == 'DETECT' \
         else PredictorRecurrent(rnn, rrefs)
 
     opt = DistributedOptimizer(
@@ -221,11 +224,11 @@ def train(rrefs, kwargs, rnn_constructor, rnn_args, impl):
 
             print("backward")
             dist_autograd.backward(context_id, loss)
-            
+
             print("step")
             opt.step(context_id)
 
-            elapsed = time.time()-st 
+            elapsed = time.time() - st
             times.append(elapsed)
             l = torch.stack(loss).sum()
             print('[%d] Loss %0.4f  %0.2fs' % (e, l.item(), elapsed))
@@ -234,13 +237,13 @@ def train(rrefs, kwargs, rnn_constructor, rnn_args, impl):
         model.eval()
         with torch.no_grad():
             zs = model.forward(TData.TRAIN, no_grad=True)
-            p,n = model.score_edges(zs, TData.VAL)
-            
-            auc,ap = get_score(p,n)
+            p, n = model.score_edges(zs, TData.VAL)
+
+            auc, ap = get_score(p, n)
             print("\tValidation: AP: %0.4f  AUC: %0.4f" % (ap, auc), end='')
 
             # Either incriment or update early stopping criteria
-            tot = auc+ap
+            tot = auc + ap
             if tot > best[1]:
                 print('*\n')
                 best = (model.save_states(), tot)
@@ -248,11 +251,11 @@ def train(rrefs, kwargs, rnn_constructor, rnn_args, impl):
             else:
                 print('\n')
                 if e >= kwargs['min']:
-                    no_progress += 1 
+                    no_progress += 1
 
             if no_progress == kwargs['patience']:
                 print("Early stopping!")
-                break 
+                break
 
     model.load_states(*best[0])
 
@@ -263,10 +266,10 @@ def train(rrefs, kwargs, rnn_constructor, rnn_args, impl):
     f = open('model_save.pkl', 'wb+')
     pickle.dump(states, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    tpe = sum(times)/len(times)
+    tpe = sum(times) / len(times)
     print("Exiting train loop")
     print("Avg TPE: %0.4fs" % tpe)
-    
+
     return model, h0, tpe
 
 
@@ -274,6 +277,8 @@ def train(rrefs, kwargs, rnn_constructor, rnn_args, impl):
 Given a trained model, generate the optimal cutoff point using
 the validation data
 '''
+
+
 def get_cutoff(model, h0, times, kwargs, lambda_param):
     # Weirdly, calling the parent class' method doesn't work
     # whatever. This is a hacky solution, but it works
@@ -298,7 +303,7 @@ def get_cutoff(model, h0, times, kwargs, lambda_param):
     model.eval()
     zs = _remote_method(
         Encoder.forward,
-        model.gcns[0], 
+        model.gcns[0],
         TData.ALL,
         True
     )
@@ -308,18 +313,19 @@ def get_cutoff(model, h0, times, kwargs, lambda_param):
         zs, h0 = model.rnn(zs, h0, include_h=True)
 
     # Then score them
-    p,n = _remote_method(
-        Encoder.score_edges, 
+    p, n = _remote_method(
+        Encoder.score_edges,
         model.gcns[0],
         zs, TData.ALL,
         kwargs['val_nratio']
     )
 
     # Finally, figure out the optimal cutoff score
-    model.cutoff = get_optimal_cutoff(p,n,fw=lambda_param)
+    model.cutoff = get_optimal_cutoff(p, n, fw=lambda_param)
 
     print()
     return h0, zs[-1]
+
 
 def test(model, h0, times, rrefs):
     # For whatever reason, it doesn't know what to do if you call
@@ -330,18 +336,18 @@ def test(model, h0, times, rrefs):
 
     # Load train data into workers
     ld_args = get_work_units(
-        len(rrefs), 
-        times['te_start'], 
+        len(rrefs),
+        times['te_start'],
         times['te_end'],
-        times['delta'], 
+        times['delta'],
         True
     )
 
     print("Loading test data")
-    
+
     # Make sure there's enough data for each worker to do something
     dont_use = 0
-    for ld in ld_args:    
+    for ld in ld_args:
         if ld['start'] == ld['end']:
             dont_use += 1
         else:
@@ -351,10 +357,10 @@ def test(model, h0, times, rrefs):
     futs = [
         _remote_method_async(
             Encoder.load_new_data,
-            rrefs[i], 
-            LOAD_FN, 
-            ld_args[i+dont_use]
-        ) for i in range(len(rrefs)-dont_use)
+            rrefs[i],
+            LOAD_FN,
+            ld_args[i + dont_use]
+        ) for i in range(len(rrefs) - dont_use)
     ]
     model.num_workers = len(futs)
 
@@ -367,22 +373,22 @@ def test(model, h0, times, rrefs):
         model.eval()
         s = time.time()
         zs = model.forward(TData.TEST, h0=h0, no_grad=True)
-        ctime = time.time()-s
+        ctime = time.time() - s
 
     # Scores all edges and matches them with name/timestamp
     print("Scoring")
     scores, labels, weights = model.score_all(zs)
     stats.append(
-            score_stats(
-            model.__class__.__name__, 
+        score_stats(
+            model.__class__.__name__,
             scores, labels, weights, model.cutoff, ctime
-        )       
+        )
     )
-    
+
     # Then reset model to having all workers for future tests
     model.num_workers = len(rrefs)
     return stats
-    
+
 
 def score_stats(title, scores, labels, weights, cutoff, ctime):
     # Cat scores from timesteps together bc separation 
@@ -396,20 +402,20 @@ def score_stats(title, scores, labels, weights, cutoff, ctime):
     classified[scores <= cutoff] = 1
 
     # Calculate TPR
-    p = classified[labels==1]
+    p = classified[labels == 1]
     tpr = p.mean()
     tp = p.sum()
     del p
 
     # Calculate FPR
-    f = classified[labels==0]
+    f = classified[labels == 0]
     fp = f.sum()
     fpr = f.mean()
-    del f 
-    
+    del f
+
     # Because a low score correlates to a 1 lable, sub from 1 to get
     # accurate AUC/AP scores
-    scores = 1-scores
+    scores = 1 - scores
 
     # Get metrics
     auc = auc_score(labels, scores)
@@ -421,22 +427,23 @@ def score_stats(title, scores, labels, weights, cutoff, ctime):
     print("TPR: %0.4f, FPR: %0.4f" % (tpr, fpr))
     print("TP: %d  FP: %d" % (tp, fp))
     print("F1: %0.8f" % f1)
-    print("AUC: %0.4f  AP: %0.4f\n" % (auc,ap))
+    print("AUC: %0.4f  AP: %0.4f\n" % (auc, ap))
 
     return {
         'Model': title,
-        'TPR':tpr.item(), 
-        'FPR':fpr.item(), 
-        'TP':tp.item(), 
-        'FP':fp.item(), 
-        'F1':f1, 
-        'AUC':auc, 
+        'TPR': tpr.item(),
+        'FPR': fpr.item(),
+        'TP': tp.item(),
+        'FP': fp.item(),
+        'F1': f1,
+        'AUC': auc,
         'AP': ap,
-        'FwdTime':ctime
+        'FwdTime': ctime
     }
 
-def run_all(workers, rnn_constructor, rnn_args, worker_constructor, 
-            worker_args, delta, just_test, lambda_param, impl, load_fn, 
+
+def run_all(workers, rnn_constructor, rnn_args, worker_constructor,
+            worker_args, delta, just_test, lambda_param, impl, load_fn,
             tr_start, tr_end, val_times, te_times, tr_args):
     '''
     Starts up proceses, trains validates and tests the model given 
@@ -472,11 +479,11 @@ def run_all(workers, rnn_constructor, rnn_args, worker_constructor,
         tr_args : dict
             Hyperparameters for training. E.g. epochs, patience, etc. 
         '''
-    
+
     # Need at least 2 deltas; default to 5% of tr data if that's enough
     if val_times is None:
-        val = max((tr_end - tr_start) // 20, delta*2)
-        val_start = tr_end-val
+        val = max((tr_end - tr_start) // 20, delta * 2)
+        val_start = tr_end - val
         val_end = tr_end
         tr_end = val_start
     else:
@@ -484,7 +491,7 @@ def run_all(workers, rnn_constructor, rnn_args, worker_constructor,
         val_end = val_times[1]
 
     # Make sure each worker has some data on it
-    max_workers = int((tr_end-tr_start) // delta)
+    max_workers = int((tr_end - tr_start) // delta)
     workers = max(min(max_workers, workers), 1)
 
     times = {
@@ -499,14 +506,14 @@ def run_all(workers, rnn_constructor, rnn_args, worker_constructor,
     print(times)
 
     # Start workers
-    world_size = workers+1
+    world_size = workers + 1
     mp.spawn(
         init_procs,
         args=(
-            world_size, 
-            rnn_constructor, 
-            rnn_args, 
-            worker_constructor, 
+            world_size,
+            rnn_constructor,
+            rnn_args,
+            worker_constructor,
             worker_args,
             times,
             just_test,
@@ -521,10 +528,11 @@ def run_all(workers, rnn_constructor, rnn_args, worker_constructor,
 
     # Retrieve stats, and cleanup temp file
     stats = pickle.load(open(TMP_FILE, 'rb'))
-    #os.remove(TMP_FILE)
+    # os.remove(TMP_FILE)
 
     print(stats)
     return stats
+
 
 if __name__ == '__main__':
     print("Please run this file using run.py")

@@ -21,9 +21,12 @@ DEFAULT_TR = {
     'val_nratio': 1
 }
 
-OUTPATH="/Users/vboucek/Desktop/"
+OUTPATH = None
+
+assert OUTPATH, "Please provide path where the output will be saved"
 
 torch.multiprocessing.set_sharing_strategy("file_system")
+
 
 def get_args():
     global DEFAULT_TR
@@ -65,7 +68,7 @@ def get_args():
         args.tr_end = lanl.DATE_OF_EVIL_LANL
         args.val_times = None
         args.te_times = [(args.tr_end, lanl.TIMES["all"])]
-        args.delta = int(args.delta * (60**2))
+        args.delta = int(args.delta * (60 ** 2))
         args.manual = False
     elif args.dataset == 'OPTC':
         args.loader = optc.load_optc_dist
@@ -73,7 +76,7 @@ def get_args():
         args.tr_end = optc.DATE_OF_EVIL_OPTC
         args.val_times = None
         args.te_times = [(args.tr_end, optc.ALL)]
-        args.delta = int(args.delta * (60**2))
+        args.delta = int(args.delta * (60 ** 2))
         args.manual = False
         args.loader = pivoting.load_pivoting_dist
         args.tr_start = 0
@@ -101,6 +104,7 @@ def get_args():
         args.rnn = EmptyModel
 
     return args, readable, model_str
+
 
 if __name__ == '__main__':
     args, argstr, modelstr = get_args()
@@ -140,7 +144,7 @@ if __name__ == '__main__':
     if args.nowrite:
         exit()
 
-    f = open(OUTPATH+'results.txt', 'a')
+    f = open(OUTPATH + 'results.txt', 'a')
     f.write(str(argstr) + '\n')
     f.write('LR: ' + str(args.lr) + '\n')
     f.write(modelstr + '\n')
