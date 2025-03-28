@@ -59,7 +59,7 @@ def load_vgrnn(dataset):
     assert dataset in datasets, \
         "Dataset %s not in allowed list: %s" % (dataset, str(datasets))
 
-    adj = os.path.join('/mnt/raid0_24TB/isaiah/code/TGCN/src/data', dataset, 'adj_orig_dense_list.pickle')
+    adj = os.path.join('./data', dataset, 'adj_orig_dense_list.pickle')
     with open(adj, 'rb') as f:
         fbytes = f.read() 
 

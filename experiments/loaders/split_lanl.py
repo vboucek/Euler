@@ -1,5 +1,5 @@
-import os 
-import pickle 
+import os
+import pickle
 from tqdm import tqdm
 
 # LANL is so huge it's prohibitively expensive to scan it for 
@@ -10,14 +10,15 @@ from tqdm import tqdm
 # Please obtain the LANL data set from:
 # https://csr.lanl.gov/data/cyber1/
 
-RED = '' # Location of redteam.txt
-SRC = '' # Location of auth.txt
-DST = '' # Directory to save output files to
+RED = None  # Location of redteam.txt
+SRC = None  # Location of auth.txt
+DST = None  # Directory to save output files to
 
-assert RED and SRC and DST, 'Please download the LANL data set, and mark in the code where it is:\nLines 13-15 of /lanl_experiments/loaders/split.py'
+assert RED and SRC and DST, 'Please download the LANL data set, and mark in the code where it is:\nLines 13-15 of /experiments/loaders/split_lanl.py'
 
 DELTA = 10000
-DAY = 60**2 * 24
+DAY = 60 ** 2 * 24
+
 
 def mark_anoms():
     '''
@@ -44,20 +45,21 @@ def mark_anoms():
         ts = int(tokens.pop(0))
         add_ts(anom_dict, tokens, ts)
 
-    return anom_dict 
+    return anom_dict
+
 
 def is_anomalous(d, src, dst, ts):
-    if ts < 150885 or (src, dst) not in d:
-        return False 
+    if ts <= 150885 or (src, dst) not in d:  # Fix: First anomaly starts in 150885, must use <=
+        return False
 
-    times = d[(src,dst)]
+    times = d[(src, dst)]
     for time in times:
         # Mark true if node appeared in a comprimise
         # in the last 24 hrs (as was done by Nethawk)
         if ts == time:
             return True
 
-    return False 
+    return False
 
 
 def split():
@@ -66,13 +68,13 @@ def split():
     last_time = 1
     cur_time = 0
 
-    f_in = open(SRC,'r')
+    f_in = open(SRC, 'r')
     f_out = open(DST + str(cur_time) + '.txt', 'w+')
 
-    line = f_in.readline() # Skip headers
+    line = f_in.readline()  # Skip headers
     line = f_in.readline()
 
-    nmap = {} 
+    nmap = {}
     nid = [0]
 
     def get_or_add(n):
@@ -84,21 +86,21 @@ def split():
 
     prog = tqdm(desc='Seconds parsed', total=5011199)
 
-    fmt_src = lambda x : \
+    fmt_src = lambda x: \
         x.split('@')[0].replace('$', '')
 
-    fmt_label = lambda ts,src,dst : \
+    fmt_label = lambda ts, src, dst: \
         1 if is_anomalous(anom_dict, src, dst, ts) \
-        else 0 
+            else 0
 
     # Really only care about time stamp, and src/dst computers
     # Hopefully this saves a bit of space when replicating the huge
     # auth.txt flow file
-    fmt_line = lambda ts,src,dst : (
+    fmt_line = lambda ts, src, dst: (
         '%s,%s,%s,%s\n' % (
-            ts, get_or_add(src), get_or_add(dst), 
-            fmt_label(int(ts),src,dst)
-        ), 
+            ts, get_or_add(src), get_or_add(dst),
+            fmt_label(int(ts), src, dst)
+        ),
         int(ts)
     )
 
@@ -112,15 +114,15 @@ def split():
         l, ts = fmt_line(tokens[0], tokens[3], tokens[4])
 
         if ts != last_time:
-            prog.update(ts-last_time)
+            prog.update(ts - last_time)
             last_time = ts
 
         # After ts progresses at least 10,000 seconds, make a new file
-        if ts >= cur_time+DELTA:
+        if ts >= cur_time + DELTA:
             cur_time += DELTA
             f_out.close()
             f_out = open(DST + str(cur_time) + '.txt', 'w+')
-        
+
         f_out.write(l)
         line = f_in.readline()
 
@@ -128,7 +130,7 @@ def split():
     f_in.close()
 
     nmap_rev = [None] * (max(nmap.values()) + 1)
-    for (k,v) in nmap.items():
+    for (k, v) in nmap.items():
         nmap_rev[v] = k
 
     with open(DST + 'nmap.pkl', 'wb+') as f:

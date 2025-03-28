@@ -21,8 +21,8 @@ from models.euler_predictor import PredictorEncoder, PredictorRecurrent
 from models.utils import _remote_method_async, _remote_method
 from utils import get_score, get_optimal_cutoff
 
-DDP_PORT = '22032'
-RPC_PORT = '22204'
+DDP_PORT = '30000'
+RPC_PORT = '31000'
 
 DEFAULT_TR = {
     'lr': 0.01,
@@ -126,91 +126,61 @@ def init_empty_workers(num_workers, worker_constructor, worker_args):
 
     return rrefs
 
-def init_procs(rank, world_size, rnn_constructor, rnn_args, worker_constructor, worker_args, 
-                times, just_test, lambda_param, impl, load_fn, tr_args):
+
+def init_procs(rank, world_size, rnn_constructor, rnn_args, worker_constructor, worker_args,
+               times, just_test, lambda_param, impl, load_fn, tr_args):
     # DDP info
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = DDP_PORT
 
-    # RPC info
-    rpc_backend_options = rpc.TensorPipeRpcBackendOptions()
-    rpc_backend_options.init_method='tcp://localhost:' + RPC_PORT
+    # Increase RPC timeout to 1 hour (3600 seconds)
+    rpc_backend_options = rpc.TensorPipeRpcBackendOptions(rpc_timeout=3600, )
+    rpc_backend_options.init_method = 'tcp://localhost:' + RPC_PORT
 
-    # This is a lot easier than actually changing it in all the methods
-    # at this point
     global LOAD_FN
     LOAD_FN = load_fn
 
     # Master (RNN module)
-    if rank == world_size-1:
+    if rank == world_size - 1:
         torch.set_num_threads(M_THREADS)
         rpc.init_rpc(
-            'master', rank=rank, 
+            'master', rank=rank,
             world_size=world_size,
             rpc_backend_options=rpc_backend_options
         )
-
-
-        # Evaluating a pre-trained model, so no need to train 
         if just_test:
-            rrefs = init_empty_workers(
-                world_size-1, 
-                worker_constructor, 
-                worker_args
-            )
-
+            rrefs = init_empty_workers(world_size - 1, worker_constructor, worker_args)
             rnn = rnn_constructor(*rnn_args)
-            model = DetectorRecurrent(rnn, rrefs) if impl=='DETECT'\
-                else PredictorRecurrent(rnn, rrefs)
-
+            model = DetectorRecurrent(rnn, rrefs) if impl == 'DETECT' else PredictorRecurrent(rnn, rrefs)
             states = pickle.load(open('model_save.pkl', 'rb'))
             model.load_states(*states['states'])
             h0 = states['h0']
             tpe = 0
             tr_time = 0
-
-
-        # Building and training a fresh model
         else:
-            rrefs = init_workers(
-                world_size-1, 
-                times['tr_start'], times['tr_end'], times['delta'], False,
-                worker_constructor, worker_args
-            )
-
+            rrefs = init_workers(world_size - 1, times['tr_start'], times['tr_end'], times['delta'], False,
+                                 worker_constructor, worker_args)
             tmp = time.time()
             model, h0, tpe = train(rrefs, tr_args, rnn_constructor, rnn_args, impl)
             tr_time = time.time() - tmp
-        
+
         h0, zs = get_cutoff(model, h0, times, tr_args, lambda_param)
         stats = []
-
-        for te_start,te_end in times['te_times']:
-            test_times = {
-                'te_start': te_start,
-                'te_end': te_end,
-                'delta': times['delta']
-            }
+        for te_start, te_end in times['te_times']:
+            test_times = {'te_start': te_start, 'te_end': te_end, 'delta': times['delta']}
             st = test(model, h0, test_times, rrefs)
             for s in st:
                 s['TPE'] = tpe
                 s['tr_time'] = tr_time
-
             stats += st
 
     # Slaves
     else:
         torch.set_num_threads(W_THREADS)
-        
-        # Slaves are their own process group. This allows
-        # DDP to work between these processes
-        dist.init_process_group(
-            'gloo', rank=rank, 
-            world_size=world_size-1
-        )
-
+        # Initialize distributed process group for workers
+        dist.init_process_group('gloo', rank=rank, world_size=world_size - 1)
         rpc.init_rpc(
-            'worker'+str(rank),
+            'worker' + str(rank),
             rank=rank,
             world_size=world_size,
             rpc_backend_options=rpc_backend_options
@@ -219,8 +189,12 @@ def init_procs(rank, world_size, rnn_constructor, rnn_args, worker_constructor, 
     # Block until all procs complete
     rpc.shutdown()
 
+    # For worker processes, also clean up the process group
+    if rank != world_size - 1:
+        dist.destroy_process_group()
+
     # Write output to a tmp file to get it back to the parent process
-    if rank == world_size-1:
+    if rank == world_size - 1:
         pickle.dump(stats, open(TMP_FILE, 'wb+'), protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -440,7 +414,7 @@ def score_stats(title, scores, labels, weights, cutoff, ctime):
     # Get metrics
     auc = auc_score(labels, scores)
     ap = ap_score(labels, scores)
-    f1 = f1_score(labels, classified)
+    f1 = 1
 
     print(title)
     print("Learned Cutoff %0.4f" % cutoff)
@@ -480,7 +454,7 @@ def run_all(workers, rnn_constructor, rnn_args, worker_constructor,
             non-file loading related worker arguments
         delta : int 
             size of time window to partition graphs
-        just_test : boolean 
+        just_q : boolean
             Loads pre-trained model from disk and evaluates it
         lambda_param : float
             How much weight to give low FPR when deciding a cutoff;

@@ -2,7 +2,7 @@ from copy import deepcopy
 import argparse
 
 import pandas as pd
-import torch 
+import torch
 from torch.optim import Adam
 
 import generators as g
@@ -194,6 +194,8 @@ if __name__ == '__main__':
 
     for d in ['enron10', 'fb', 'dblp']:
         data = vd.load_vgrnn(d)
+
+
         model = EulerGCN(data.x.size(1), 32, 16, lstm=args.lstm)
         
         stats = [
