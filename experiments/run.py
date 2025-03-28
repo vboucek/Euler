@@ -46,7 +46,7 @@ def get_args():
     ap.add_argument('--fpweight', type=float, default=0.6)
     ap.add_argument('--nowrite', action='store_true')
     ap.add_argument('--impl', '-i', type=str.upper, choices=['DETECT', 'PREDICT', 'D', 'P', 'PRED'], default="DETECT")
-    ap.add_argument('--dataset', default='LANL', type=str.upper)
+    ap.add_argument('--dataset', default='LANL', choices=['LANL', 'OPTC', 'PIVOTING'], type=str.upper)
     ap.add_argument('--lr', default=0.005, type=float)
     ap.add_argument('--patience', default=5, type=int)
 
@@ -78,6 +78,7 @@ def get_args():
         args.te_times = [(args.tr_end, optc.ALL)]
         args.delta = int(args.delta * (60 ** 2))
         args.manual = False
+    elif args.dataset == "PIVOTING":
         args.loader = pivoting.load_pivoting_dist
         args.tr_start = 0
         args.tr_end = pivoting.DATE_OF_EVIL_PIVOTING
