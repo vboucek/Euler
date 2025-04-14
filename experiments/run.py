@@ -83,7 +83,7 @@ def get_args():
         args.tr_start = 0
         args.tr_end = pivoting.DATE_OF_EVIL_PIVOTING
         args.val_times = None
-        args.te_times = [(args.tr_end, optc.ALL)]
+        args.te_times = [(args.tr_end, pivoting.ALL)]
         args.delta = int(args.delta * (60 ** 2))
         args.manual = False
     else:
